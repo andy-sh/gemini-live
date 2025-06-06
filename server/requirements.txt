@@ -7,4 +7,3 @@ aiohttp==3.11.11
 python-dotenv==1.0.1
 google-api-python-client==2.122.0
 google-auth-oauthlib==1.2.0
-google-cloud-secret-manager==2.19.0
