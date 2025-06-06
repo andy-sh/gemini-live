@@ -13,10 +13,10 @@
 # limitations under the License.
 
 """
-Gemini客户端初始化和连接管理模块
-此模块负责创建和管理与Google Gemini AI服务的连接会话
+Gemini client initialization and connection management
 """
 
+# 导入必要的库
 import logging
 import os
 from google import genai
@@ -25,18 +25,20 @@ from config.config import MODEL, CONFIG, api_config, ConfigurationError
 # 设置日志记录器
 logger = logging.getLogger(__name__)
 
+
 async def create_gemini_session():
     """
     创建并初始化Gemini客户端和会话
-    
+
     此函数负责:
     1. 初始化API认证
-    2. 根据配置选择使用Vertex AI或开发端点
-    3. 创建并返回Gemini会话
-    
+    2. 配置开发环境端点
+    3. 创建Gemini客户端实例
+    4. 建立实时连接会话
+
     Returns:
-        session: Gemini会话对象
-        
+        session: 返回一个已配置的Gemini实时会话对象
+
     Raises:
         ConfigurationError: 当配置出现问题时抛出
         Exception: 其他未预期的错误
@@ -44,47 +46,26 @@ async def create_gemini_session():
     try:
         # 初始化API认证配置
         await api_config.initialize()
-        
-        if api_config.use_vertex:
-            # Vertex AI配置部分
-            # 获取Vertex AI的位置和项目ID
-            location = os.getenv('VERTEX_LOCATION', 'us-central1')
-            project_id = os.environ.get('PROJECT_ID')
-            
-            # 验证项目ID是否存在
-            if not project_id:
-                raise ConfigurationError("PROJECT_ID is required for Vertex AI")
-            
-            logger.info(f"Initializing Vertex AI client with location: {location}, project: {project_id}")
-            
-            # 初始化Vertex AI客户端
-            client = genai.Client(
-                vertexai=True,
-                location=location,
-                project=project_id,
-                # http_options={'api_version': 'v1beta'}
-            )
-            logger.info(f"Vertex AI client initialized with client: {client}")
-        else:
-            # 开发端点配置部分
-            logger.info("Initializing development endpoint client")
-            
-            # 初始化开发环境客户端
-            client = genai.Client(
-                vertexai=False,
-                http_options={'api_version': 'v1alpha'},
-                api_key=api_config.api_key
-            )
-                
-        # 创建Gemini会话
-        # 使用指定的模型和配置参数建立连接
-        session = client.aio.live.connect(
-            model=MODEL,
-            config=CONFIG
+
+        # 配置开发环境端点
+        logger.info("Initializing development endpoint client")
+
+        # 初始化Gemini客户端
+        # vertexai=False 表示不使用Vertex AI服务
+        # http_options 设置API版本为v1alpha
+        # api_key 使用配置中的API密钥
+        client = genai.Client(
+            vertexai=False,
+            http_options={"api_version": "v1alpha"},
+            api_key=api_config.api_key,
         )
-        
+
+        # 创建实时连接会话
+        # 使用指定的模型和配置参数
+        session = client.aio.live.connect(model=MODEL, config=CONFIG)
+
         return session
-        
+
     except ConfigurationError as e:
         # 处理配置错误
         logger.error(f"Configuration error while creating Gemini session: {str(e)}")
@@ -92,4 +73,4 @@ async def create_gemini_session():
     except Exception as e:
         # 处理其他未预期的错误
         logger.error(f"Unexpected error while creating Gemini session: {str(e)}")
-        raise 
+        raise
