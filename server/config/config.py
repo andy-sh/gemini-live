@@ -31,9 +31,12 @@ class ApiConfig:
     """API configuration handler."""
 
     def __init__(self):
+        # Determine if using Vertex AI
+        self.use_vertex = os.getenv("VERTEX_API", "false").lower() == "true"
+
         self.api_key: Optional[str] = None
 
-        logger.info(f"Initialized API configuration with Gemini API")
+        logger.info(f"Initialized API configuration with Vertex AI: {self.use_vertex}")
 
     async def initialize(self):
         """Initialize API credentials."""
@@ -52,8 +55,13 @@ class ApiConfig:
 api_config = ApiConfig()
 
 # Model configuration
-MODEL = os.getenv("MODEL_DEV_API", "models/gemini-2.0-flash-exp")
-VOICE = os.getenv("VOICE_DEV_API", "Kore")
+# Model configuration
+if api_config.use_vertex:
+    MODEL = os.getenv("MODEL_VERTEX_API", "gemini-2.0-flash-exp")
+    VOICE = os.getenv("VOICE_VERTEX_API", "Aoede")
+else:
+    MODEL = os.getenv("MODEL_DEV_API", "models/gemini-2.0-flash-exp")
+    VOICE = os.getenv("VOICE_DEV_API", "Kore")
 
 # Load system instructions
 try:

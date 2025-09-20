@@ -1,96 +1,98 @@
-<!--
- Copyright 2025 Google LLC
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
--->
- 
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Project Livewire</title>
+  <!-- 引入自定义样式表 -->
   <link rel="stylesheet" href="styles/style.css">
+  <!-- 引入Google Material Icons字体图标 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   
-  <!-- Favicon -->
+  <!-- 网站图标 -->
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
 </head>
 <body>
+  <!-- 主容器：显示项目标题和说明 -->
   <div class="container">
     <h1>Project Livewire</h1>
     <p>Speak into your microphone and optionally share your webcam or screen to engage in a multimedia conversation.</p>
   </div>
 
+  <!-- 输入控制区域：包含麦克风、摄像头、屏幕共享和文本输入功能 -->
   <div class="input-container">
+    <!-- 麦克风按钮：初始状态为禁用 -->
     <button id="micButton" disabled class="action-button">
       <span class="material-symbols-outlined">mic</span>
     </button>
+    <!-- 摄像头按钮 -->
     <button id="webcamButton" class="action-button">
       <span class="material-symbols-outlined">videocam</span>
     </button>
+    <!-- 屏幕共享按钮 -->
     <button id="screenButton" class="action-button">
       <span class="material-symbols-outlined">present_to_all</span>
     </button>
+    <!-- 文本输入区域 -->
     <div class="text-input-container">
       <input type="text" id="textInput" placeholder="Type your message..." class="text-input">
+      <!-- 发送按钮 -->
       <button id="sendButton" class="action-button">
         <span class="material-symbols-outlined">send</span>
       </button>
+      <!-- 中断按钮：默认隐藏 -->
       <button id="interruptButton" class="action-button" style="display: none;">
         <span class="material-symbols-outlined">cancel</span>
       </button>
     </div>
   </div>
 
+  <!-- 视频预览容器 -->
   <div class="video-container">
     <video id="videoPreview" autoplay playsinline class="hidden"></video>
   </div>
 
+  <!-- 输出消息显示区域 -->
   <div id="output"></div>
 
-  <!-- Load EventEmitter3 first -->
+  <!-- 首先加载EventEmitter3库 -->
   <script src="https://cdn.jsdelivr.net/npm/eventemitter3@5.0.1/dist/eventemitter3.umd.min.js"></script>
 
   <script type="module">
+    // 导入所需的模块
     import { AudioRecorder } from './src/audio/audio-recorder.js';
     import { AudioStreamer } from './src/audio/audio-streamer.js';
     import { MediaHandler } from './src/media/media-handler.js';
     import { GeminiAPI } from './src/api/gemini-api.js';
     import { base64ToArrayBuffer } from './src/utils/utils.js';
 
-    // Initialize components
+    // 初始化组件
     const output = document.getElementById('output');
     const audioRecorder = new AudioRecorder();
+    // 创建音频上下文，设置采样率为24kHz
     const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
     const audioStreamer = new AudioStreamer(audioContext);
     const mediaHandler = new MediaHandler();
+    // WebSocket服务器地址
     const wsEndpoint = 'ws://localhost:8081';
     const api = new GeminiAPI(wsEndpoint);
 
-    let isRecording = false;
-    let hasShownSpeakingMessage = false;
-    let currentTurn = 0;
-    let lastAudioTurn = -1;
+    // 状态变量
+    let isRecording = false;          // 是否正在录音
+    let hasShownSpeakingMessage = false;  // 是否已显示说话提示
+    let currentTurn = 0;              // 当前对话轮次
+    let lastAudioTurn = -1;           // 上一次音频处理的轮次
 
-    // Initialize media handler
+    // 初始化媒体处理器
     mediaHandler.initialize(document.getElementById('videoPreview'));
 
-    // Set up API handlers
+    // 设置API事件处理器
     api.onReady = () => {
+      // API就绪时启用麦克风按钮
       document.getElementById('micButton').disabled = false;
     };
 
+    // 处理接收到的音频数据
     api.onAudioData = async (audioData) => {
       try {
         if (!api.isSpeaking || lastAudioTurn !== currentTurn) {
@@ -99,6 +101,7 @@
           lastAudioTurn = currentTurn;
           document.getElementById('interruptButton').style.display = 'inline-block';
         }
+        // 将base64音频数据转换为ArrayBuffer并播放
         const arrayBuffer = base64ToArrayBuffer(audioData);
         audioStreamer.addPCM16(new Uint8Array(arrayBuffer));
         audioStreamer.resume();
@@ -107,27 +110,29 @@
       }
     };
 
+    // 处理接收到的文本内容
     api.onTextContent = (text) => {
       if (text.trim()) {
         logMessage('Gemini: ' + text);
       }
     };
 
+    // 处理对话轮次完成事件
     api.onTurnComplete = () => {
       logMessage('Gemini: Finished speaking');
-      api.isSpeaking = false;  // Reset speaking state
+      api.isSpeaking = false;  // 重置说话状态
       audioStreamer.complete();
       document.getElementById('interruptButton').style.display = 'none';
     };
 
-    // Add interruption handler
+    // 处理中断事件
     api.onInterrupted = (data) => {
       logMessage('Gemini: Response interrupted');
       api.isSpeaking = false;
-      audioStreamer.stop();  // Stop current playback and clear queue
+      audioStreamer.stop();  // 停止当前播放并清空队列
       document.getElementById('interruptButton').style.display = 'none';
       
-      // Show visual feedback for interruption
+      // 显示中断的视觉反馈
       const messageElement = document.createElement('p');
       messageElement.className = 'interrupted-message';
       messageElement.textContent = 'Response interrupted by user input';
@@ -135,20 +140,21 @@
       output.scrollTop = output.scrollHeight;
     };
 
-    // Add function call and response handlers
+    // 处理函数调用事件
     api.onFunctionCall = (data) => {
       logMessage('Function: ' + data.name);
       logMessage('Parameters: ' + JSON.stringify(data.args, null, 2));
     };
 
+    // 处理函数响应事件
     api.onFunctionResponse = (data) => {
       logMessage('API Response: ' + JSON.stringify(data, null, 2));
     };
 
-    // UI Event Handlers
+    // 开始录音函数
     async function startRecording() {
       try {
-        // If model is speaking, treat this as an interruption
+        // 如果模型正在说话，将其视为中断
         if (api.isSpeaking) {
           audioStreamer.stop();
           api.isSpeaking = false;
@@ -159,6 +165,7 @@
         hasShownSpeakingMessage = false;
         currentTurn++;
         
+        // 设置音频数据接收处理
         audioRecorder.on('data', (base64Data) => {
           if (!hasShownSpeakingMessage) {
             logMessage('You: Speaking...');
@@ -168,6 +175,7 @@
         });
 
         isRecording = true;
+        // 更新麦克风按钮图标
         document.getElementById('micButton').innerHTML = 
           '<span class="material-symbols-outlined">stop</span>';
       } catch (error) {
@@ -176,15 +184,17 @@
       }
     }
 
+    // 停止录音函数
     function stopRecording() {
       audioRecorder.stop();
       isRecording = false;
       hasShownSpeakingMessage = false;
+      // 重置麦克风按钮图标
       document.getElementById('micButton').innerHTML = 
         '<span class="material-symbols-outlined">mic</span>';
       logMessage('You: Recording stopped.');
       
-      // Stop video streams
+      // 停止所有视频流
       mediaHandler.stopAll();
       document.getElementById('webcamButton').innerHTML = 
         '<span class="material-symbols-outlined">videocam</span>';
@@ -195,10 +205,11 @@
       api.isSpeaking = false;
     }
 
+    // 消息日志函数
     function logMessage(message) {
       const messageElement = document.createElement('p');
       
-      // Add specific styling based on message content
+      // 根据消息内容添加特定样式
       if (message.startsWith('Function:')) {
         messageElement.className = 'function-name';
       } else if (message.startsWith('Parameters:')) {
@@ -216,23 +227,23 @@
       output.scrollTop = output.scrollHeight;
     }
 
-    // Add function to send text message
+    // 发送文本消息函数
     function sendTextMessage() {
       const textInput = document.getElementById('textInput');
       const text = textInput.value.trim();
       if (!text) return;
 
-      // Clear input
+      // 清空输入框
       textInput.value = '';
 
-      // Log user message
+      // 记录用户消息
       logMessage('You: ' + text);
 
-      // Send text message
+      // 发送文本消息
       api.sendTextMessage(text);
     }
 
-    // Set up button click handlers
+    // 设置按钮点击事件处理器
     document.getElementById('micButton').onclick = () => {
       if (isRecording) {
         stopRecording();
@@ -241,16 +252,17 @@
       }
     };
 
-    // Add send button handler
+    // 设置发送按钮点击事件
     document.getElementById('sendButton').onclick = sendTextMessage;
 
-    // Add keypress handler for text input
+    // 设置文本输入框回车事件
     document.getElementById('textInput').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
         sendTextMessage();
       }
     });
 
+    // 设置摄像头按钮点击事件
     document.getElementById('webcamButton').onclick = async () => {
       if (mediaHandler.isWebcamActive) {
         mediaHandler.stopAll();
@@ -268,6 +280,7 @@
       }
     };
 
+    // 设置屏幕共享按钮点击事件
     document.getElementById('screenButton').onclick = async () => {
       if (mediaHandler.isScreenActive) {
         mediaHandler.stopAll();
@@ -285,7 +298,7 @@
       }
     };
 
-    // Add CSS for interrupted message
+    // 添加中断消息的CSS样式
     const style = document.createElement('style');
     style.textContent = `
       .interrupted-message {
